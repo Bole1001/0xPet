@@ -1,0 +1,43 @@
+# --- 1. 编译产物 (最重要) ---
+# Windows 可执行文件
+*.exe
+*.dll
+
+# Mac/Linux 可执行文件
+*.dylib
+*.so
+
+# 忽略你的项目主程序名 (防止把几十MB的程序传上去)
+0xPet
+0xPet.exe
+*.test
+*.out
+
+# --- 2. 操作系统垃圾文件 ---
+# Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- 3. IDE 和编辑器配置 (每个人设置不一样，不要上传) ---
+# VS Code
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (GoLand)
+.idea/
+*.iml
+
+# --- 4. Go 依赖目录 ---
+# 如果你不打算把第三方库源码提交到仓库 (通常不需要提交)
+vendor/
+
+# --- 5. 临时文件 ---
+# 如果你的程序会生成 debug 日志
+*.log
