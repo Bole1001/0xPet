@@ -33,6 +33,11 @@ type Manager struct {
 	isDragging    bool    // 是否正在拖拽
 	dragStartX    int     // 拖拽开始时，鼠标相对于窗口的X
 	dragStartY    int     // 拖拽开始时，鼠标相对于窗口的Y
+	// 【新增】物理引擎相关
+	velX     float64 // X轴速度
+	velY     float64 // Y轴速度
+	lastWinX int     // 上一帧窗口的 X 坐标 (用于计算甩出去的速度)
+	lastWinY int     // 上一帧窗口的 Y 坐标
 }
 
 func (g *Manager) Init() {
@@ -40,6 +45,7 @@ func (g *Manager) Init() {
 	g.ShowColor = true
 	g.ShowGlitch = true
 	g.ShowAnimation = true
+	g.ShowMonitor = true
 	// 加载默认图片
 	g.LoadPetImage("assets/idle.png")
 }
@@ -143,11 +149,12 @@ func (g *Manager) Update() error {
 	// 1. 获取鼠标状态
 	x, y := ebiten.CursorPosition()
 	isHover := x >= 0 && x <= g.MyPet.Width && y >= 0 && y <= g.MyPet.Height
-	isDragging := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
+	// 只要鼠标抓着，或者速度还没降下来，就算是在动
+	isMoving := g.isDragging || math.Abs(g.velX) > 0.1 || math.Abs(g.velY) > 0.1
 
 	// 2. 动态调整 TPS
 	// 如果正在交互（拖拽或鼠标指着它），开启 60 帧丝滑模式
-	if isHover || isDragging {
+	if isHover || isMoving || g.ShowAnimation {
 		ebiten.SetTPS(60)
 	} else {
 		// 没人理它时，开启省电模式，每秒只动 5 下
@@ -160,30 +167,90 @@ func (g *Manager) Update() error {
 	}
 
 	// 2. 拖拽逻辑
-	// 获取鼠标相对于窗口左上角的坐标
+	// 获取当前状态
 	mx, my := ebiten.CursorPosition()
+	isClicking := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	// 获取当前窗口位置 (绝对坐标)
+	wx, wy := ebiten.WindowPosition()
+
+	if isClicking {
+		// === 状态 A: 正在被鼠标抓着 ===
+		// 你的逻辑: 停止物理滑行，完全跟随鼠标
+
 		if !g.isDragging {
-			// 刚按下的瞬间，记录鼠标相对于窗口的偏移量
+			// 刚按下的瞬间：记录锚点
 			g.isDragging = true
 			g.dragStartX = mx
 			g.dragStartY = my
 		} else {
-			// 正在拖拽中：计算新的窗口位置
-			// 新窗口位置 = 鼠标屏幕绝对位置 - 初始偏移量
-			// 但 Ebiten 只给相对坐标，所以需要结合 WindowPosition
-			wx, wy := ebiten.WindowPosition()
-			// 这里的数学逻辑：
-			// 当前鼠标在屏幕的绝对位置 = wx + mx
-			// 我们希望保持 (wx_new + dragStartX) = (wx + mx)
-			// 所以 wx_new = wx + mx - dragStartX
+			// 拖拽中：移动窗口
+			newX := wx + mx - g.dragStartX
+			newY := wy + my - g.dragStartY
+			ebiten.SetWindowPosition(newX, newY)
 
-			ebiten.SetWindowPosition(wx+mx-g.dragStartX, wy+my-g.dragStartY)
+			// 【关键】计算即时速度 (Throwing Velocity)
+			// 速度 = 当前位置 - 上一帧位置
+			// 这样当你松手时，它就保留了最后这一瞬间的速度
+			g.velX = float64(newX - g.lastWinX)
+			g.velY = float64(newY - g.lastWinY)
 		}
 	} else {
+		// === 状态 B: 松手了 (自由滑行) ===
 		g.isDragging = false
+
+		// 只有当速度足够大时才计算物理 (避免微小抖动)
+		if math.Abs(g.velX) > 0.1 || math.Abs(g.velY) > 0.1 {
+
+			// 1. 应用惯性 (移动窗口)
+			wx += int(g.velX)
+			wy += int(g.velY)
+			ebiten.SetWindowPosition(wx, wy)
+
+			// 2. 应用摩擦力 (慢慢停下)
+			// 0.95 是摩擦系数，越小停得越快
+			friction := 0.95
+			g.velX *= friction
+			g.velY *= friction
+
+			// 3. 屏幕边缘碰撞检测 (反弹)
+			sw, sh := ebiten.ScreenSizeInFullscreen()
+
+			// 左墙
+			if wx < 0 {
+				wx = 0
+				g.velX = -g.velX * 0.6 // 反弹并损耗 40% 能量
+			}
+			// 右墙
+			if wx+g.MyPet.Width > sw {
+				wx = sw - g.MyPet.Width
+				g.velX = -g.velX * 0.6
+			}
+			// 上墙
+			if wy < 0 {
+				wy = 0
+				g.velY = -g.velY * 0.6
+			}
+			// 下墙
+			if wy+g.MyPet.Height > sh {
+				wy = sh - g.MyPet.Height
+				g.velY = -g.velY * 0.6
+			}
+
+			// 如果修正了位置，需要应用回去
+			ebiten.SetWindowPosition(wx, wy)
+		} else {
+			// 速度太小，直接归零，省电
+			g.velX = 0
+			g.velY = 0
+		}
 	}
+
+	// 【关键】记录这一帧的位置，留给下一帧算速度用
+	// 注意：这里要重新获取一下最终位置，因为上面可能发生了碰撞修正
+	finalX, finalY := ebiten.WindowPosition()
+	g.lastWinX = finalX
+	g.lastWinY = finalY
 
 	// --- 故障特效逻辑 ---
 	// 1. 【必须执行】先重置：把上一帧的乱码全部还原
@@ -195,8 +262,8 @@ func (g *Manager) Update() error {
 	}
 
 	// 2. 【按需执行】再搞破坏
-	// 只有当开关开启时，才生成新的乱码
-	if g.ShowGlitch {
+	// 只有当 (开关开启) 且 (没在动) 时，才产生乱码
+	if g.ShowGlitch && !isMoving {
 		if rand.Intn(100) < 10 { // 10% 概率触发
 			rows := len(g.MyPet.Grid)
 			glitchCount := 5 + rand.Intn(5)
@@ -229,11 +296,14 @@ func (g *Manager) Update() error {
 }
 
 func (g *Manager) Draw(screen *ebiten.Image) {
+	// 【新增】判断运动状态 (因为 Draw 不存状态，这里简单重算一下即可)
+	isMoving := g.isDragging || math.Abs(g.velX) > 0.1 || math.Abs(g.velY) > 0.1
+
 	// 1. 计算悬浮
 	offsetY := 0.0 // 默认为 0 (静止)
 
-	// 【新增】如果开关开启，才计算波浪
-	if g.ShowAnimation {
+	// 只有 (开关开启) 且 (没在动) 时，才计算波浪
+	if g.ShowAnimation && !isMoving {
 		offsetY = math.Sin(g.tick*0.05) * 5
 	}
 
@@ -266,7 +336,7 @@ func (g *Manager) Draw(screen *ebiten.Image) {
 	}
 
 	// 3. 【新增】绘制 HUD 监控文字
-	if g.ShowMonitor {
+	if g.ShowMonitor && !isMoving {
 		// 格式化字符串：保留0位小数 (例如 "CPU: 12% | MEM: 40%")
 		msg := fmt.Sprintf("CPU: %.0f%% | MEM: %.0f%%", g.MyPet.CPUUsage, g.MyPet.MemUsage)
 
