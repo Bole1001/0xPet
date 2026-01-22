@@ -2,6 +2,7 @@ package main
 
 import (
 	"0xPet/internal/game"
+	"0xPet/internal/monitor"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -15,6 +16,9 @@ func main() {
 	ebiten.SetWindowTitle("0xPet")
 
 	ebiten.SetWindowSize(100, 100)
+
+	// 【新增】启动系统监控 (后台线程开始每秒采集数据)
+	monitor.Start()
 
 	// 2. 初始化逻辑
 	mgr := &game.Manager{}

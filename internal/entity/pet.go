@@ -18,4 +18,8 @@ type Pet struct {
 	// 【新增】彩色模式的数据网格
 	// 这是一个二维数组：[行][列] -> 字符数据
 	Grid [][]CharData
+
+	CPUUsage   float64 // CPU 使用率 (0-100)
+	MemUsage   float64 // 内存 使用率 (0-100)
+	IsStressed bool    // 是否处于高压状态 (CPU > 80)
 }

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"io/fs" // 【新增】处理文件系统接口
@@ -14,6 +15,7 @@ import (
 
 	"0xPet/internal/ascii"
 	"0xPet/internal/entity"
+	"0xPet/internal/monitor"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -27,6 +29,7 @@ type Manager struct {
 	ShowColor     bool    // true = 显示彩色，false = 显示经典绿
 	ShowGlitch    bool    // 【新增】是否开启乱码故障
 	ShowAnimation bool    // 【新增】是否开启上下浮动呼吸
+	ShowMonitor   bool    // 【新增】是否显示 HUD (文字挂件)
 	isDragging    bool    // 是否正在拖拽
 	dragStartX    int     // 拖拽开始时，鼠标相对于窗口的X
 	dragStartY    int     // 拖拽开始时，鼠标相对于窗口的Y
@@ -75,7 +78,8 @@ func (g *Manager) UpdatePetWithImage(img image.Image) {
 		}
 	}
 	winWidth := maxLineLen * fontW
-	winHeight := len(asciiLines) * fontH
+	paddingTop := 20
+	winHeight := len(asciiLines)*fontH + paddingTop
 
 	// 3. 更新数据
 	fullText := strings.Join(asciiLines, "\n")
@@ -128,6 +132,10 @@ func (g *Manager) Update() error {
 	// 【新增】按 A 切换浮动
 	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		g.ShowAnimation = !g.ShowAnimation
+	}
+	// 【新增】TAB 键切换 监控文字显示
+	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
+		g.ShowMonitor = !g.ShowMonitor
 	}
 
 	g.tick++ // 每一帧加 1
@@ -201,6 +209,22 @@ func (g *Manager) Update() error {
 			}
 		}
 	}
+
+	// 【新增】数据同步逻辑 (放在 return nil 之前)
+	// 1. 从监控模块获取最新数据
+	cpu, mem := monitor.GetStats()
+
+	// 2. 存入宠物实体
+	g.MyPet.CPUUsage = cpu
+	g.MyPet.MemUsage = mem
+
+	// 3. 状态映射 (定义阈值)
+	// 如果 CPU 超过 80%，进入“高压状态”
+	if cpu > 80.0 {
+		g.MyPet.IsStressed = true
+	} else {
+		g.MyPet.IsStressed = false
+	}
 	return nil
 }
 
@@ -213,7 +237,7 @@ func (g *Manager) Draw(screen *ebiten.Image) {
 		offsetY = math.Sin(g.tick*0.05) * 5
 	}
 
-	baseY := 11 + int(offsetY)
+	baseY := 30 + int(offsetY)
 
 	fontW, fontH := 7, 13
 
@@ -225,17 +249,31 @@ func (g *Manager) Draw(screen *ebiten.Image) {
 
 			// 决定颜色
 			var drawColor color.Color
-			if g.ShowColor {
-				// 模式A: 彩色 (用 Grid 里存的原图颜色)
+			// 优先级 1: 如果 CPU 高压，强制变红！
+			if g.MyPet.IsStressed {
+				drawColor = color.RGBA{255, 50, 50, 255} // 鲜艳的红色
+			} else if g.ShowColor {
+				// 优先级 2: 彩色模式
 				drawColor = charData.Color
 			} else {
-				// 模式B: 纯色 (强制绿色)
+				// 优先级 3: 默认纯色 (绿色)
 				drawColor = color.RGBA{0, 255, 0, 255}
 			}
 
 			// 核心变化：画的是 charData.Char (它可能是正常的，也可能是故障乱码)
 			text.Draw(screen, charData.Char, basicfont.Face7x13, x, y, drawColor)
 		}
+	}
+
+	// 3. 【新增】绘制 HUD 监控文字
+	if g.ShowMonitor {
+		// 格式化字符串：保留0位小数 (例如 "CPU: 12% | MEM: 40%")
+		msg := fmt.Sprintf("CPU: %.0f%% | MEM: %.0f%%", g.MyPet.CPUUsage, g.MyPet.MemUsage)
+
+		// 为了让文字看清楚，我们画在背景上，用黄色高亮
+		// 位置设在 (0, 10) 也就是第一行，可能会覆盖一点点头部，但最清晰
+		// 如果想要文字不随宠物浮动，Y坐标就不要加 offsetY
+		text.Draw(screen, msg, basicfont.Face7x13, 0, 10, color.RGBA{255, 255, 0, 255}) // 黄色
 	}
 }
 
