@@ -1,6 +1,7 @@
 package ascii
 
 import (
+	"0xPet/internal/entity"
 	"image"
 	"image/color"
 	"strings"
@@ -13,37 +14,47 @@ const asciiChars = "@%#*+=-:. "
 // Convert 将图片转换为 ASCII 字符串切片
 // img: 原始图片对象
 // targetWidth: 你希望生成的宠物宽度（字符数），比如 40 或 50
-func Convert(img image.Image, targetWidth int) []string {
+// 【修改】返回值变了！现在返回 (字符串切片, 颜色网格)
+func Convert(img image.Image, targetWidth int) ([]string, [][]entity.CharData) {
 	bounds := img.Bounds()
 	width := bounds.Max.X
 	height := bounds.Max.Y
 
-	// 1. 计算缩放步长 (你的核心逻辑)
 	stepX := width / targetWidth
 	if stepX < 1 {
 		stepX = 1
 	}
-
-	// [关键点] 矫正纵横比
-	// 终端字符的高通常是宽的 2 倍，所以 Y 轴采样步长要翻倍
 	stepY := stepX * 2
 
-	var result []string
+	var strResult []string
+	// 【新增】初始化网格切片
+	var gridResult [][]entity.CharData
 
-	// 2. 遍历像素 (采样)
 	for y := 0; y < height; y += stepY {
-		var line strings.Builder // 使用 Builder 拼接字符串更高效
+		var lineBuilder strings.Builder
+		// 【新增】这一行的字符数据切片
+		var lineGrid []entity.CharData
+
 		for x := 0; x < width; x += stepX {
-			// 获取像素颜色
-			pixel := img.At(x, y)
-			// 转换并追加到当前行
-			line.WriteString(pixelToASCII(pixel))
+			pixel := img.At(x, y)       // 获取原始颜色
+			char := pixelToASCII(pixel) // 转成字符
+
+			// 1. 拼接到字符串 (旧逻辑)
+			lineBuilder.WriteString(char)
+
+			// 2. 【新增】存入 Grid (新逻辑)
+			lineGrid = append(lineGrid, entity.CharData{
+				OriginalChar: char,  // 记下原本的
+				Char:         char,  // 默认显示原本的
+				Color:        pixel, // 记下原始颜色！
+			})
 		}
-		// 将这一行加入结果集
-		result = append(result, line.String())
+		strResult = append(strResult, lineBuilder.String())
+		// 【新增】将这一行存入网格
+		gridResult = append(gridResult, lineGrid)
 	}
 
-	return result
+	return strResult, gridResult
 }
 
 // 你的原始转换逻辑，完全保留
