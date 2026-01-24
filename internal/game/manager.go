@@ -1,9 +1,11 @@
 package game
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"
+	"io"
 	"io/fs" // 【新增】处理文件系统接口
 	"log"
 	"math"      // 为了后面的动画
@@ -13,6 +15,7 @@ import (
 
 	_ "image/png" // 必加，否则 image: unknown format
 
+	"0xPet/config"
 	"0xPet/internal/ascii"
 	"0xPet/internal/entity"
 	"0xPet/internal/monitor"
@@ -34,20 +37,39 @@ type Manager struct {
 	dragStartX    int     // 拖拽开始时，鼠标相对于窗口的X
 	dragStartY    int     // 拖拽开始时，鼠标相对于窗口的Y
 	// 【新增】物理引擎相关
-	velX     float64 // X轴速度
-	velY     float64 // Y轴速度
-	lastWinX int     // 上一帧窗口的 X 坐标 (用于计算甩出去的速度)
-	lastWinY int     // 上一帧窗口的 Y 坐标
+	velX           float64 // X轴速度
+	velY           float64 // Y轴速度
+	lastWinX       int     // 上一帧窗口的 X 坐标 (用于计算甩出去的速度)
+	lastWinY       int     // 上一帧窗口的 Y 坐标
+	currentImgPath string  // 【新增】记录当前图片的绝对路径
 }
 
 func (g *Manager) Init() {
 	g.MyPet = &entity.Pet{}
-	g.ShowColor = true
-	g.ShowGlitch = true
-	g.ShowAnimation = true
-	g.ShowMonitor = true
-	// 加载默认图片
-	g.LoadPetImage("assets/idle.png")
+	// 1. 读取配置
+	cfg, err := config.Load("config.json")
+	if err != nil {
+		log.Println("读取配置失败，使用默认值:", err)
+	}
+
+	// 2. 应用开关状态
+	g.ShowColor = cfg.ShowColor
+	g.ShowGlitch = cfg.ShowGlitch
+	g.ShowAnimation = cfg.ShowAnimation
+	g.ShowMonitor = cfg.ShowMonitor
+
+	// 3. 智能加载图片
+	// 如果配置文件里的图片路径存在，就用它；否则用默认图
+	imageToLoad := "assets/idle.png"
+	if cfg.ImagePath != "" {
+		// 检查文件是否存在
+		if _, err := os.Stat(cfg.ImagePath); err == nil {
+			imageToLoad = cfg.ImagePath
+		}
+	}
+
+	// 加载图片
+	g.LoadPetImage(imageToLoad)
 }
 
 // 用于 Init 加载本地文件
@@ -58,6 +80,9 @@ func (g *Manager) LoadPetImage(path string) {
 		return
 	}
 	defer file.Close()
+
+	// 【新增】记录路径，以便下次保存
+	g.currentImgPath = path
 
 	img, _, err := image.Decode(file)
 	if err != nil {
@@ -114,14 +139,31 @@ func (g *Manager) Update() error {
 			if err == nil {
 				defer f.Close()
 
-				// 解码图片 (image.Decode 支持直接读流)
-				img, _, err := image.Decode(f)
-				if err == nil {
-					// 成功！调用通用函数更新宠物
-					log.Println("拖拽加载成功:", fileName)
-					g.UpdatePetWithImage(img)
+				// 【核心修改】
+				// 1. 先把文件内容全部读出来，存到内存里
+				// 因为流只能读一次，我们要用它做两件事(显示+保存)，所以必须先读出来
+				fileBytes, err := io.ReadAll(f)
+				if err != nil {
+					log.Println("读取文件失败:", err)
 				} else {
-					log.Println("拖拽图片解码失败:", err)
+					// 2. 用读出来的字节进行解码，更新显示
+					img, _, err := image.Decode(bytes.NewReader(fileBytes))
+					if err == nil {
+						log.Println("拖拽加载成功:", fileName)
+						g.UpdatePetWithImage(img)
+
+						// 3. 【新增】把这份数据写入本地硬盘，作为“存档”
+						saveName := "assets/saved_pet.png"
+						err = os.WriteFile(saveName, fileBytes, 0644)
+						if err != nil {
+							log.Println("图片缓存失败:", err)
+						} else {
+							// 4. 更新内存中的路径，并立即保存配置
+							g.currentImgPath = saveName
+							g.saveState() // 立即更新 config.json
+							log.Println("图片已缓存并保存配置")
+						}
+					}
 				}
 			}
 		}
@@ -163,6 +205,8 @@ func (g *Manager) Update() error {
 
 	// 1. 实现 ESC 关闭程序
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
+		// 【新增】退出前保存状态
+		g.saveState()
 		return ebiten.Termination
 	}
 
@@ -350,4 +394,23 @@ func (g *Manager) Draw(screen *ebiten.Image) {
 func (g *Manager) Layout(outsideWidth, outsideHeight int) (int, int) {
 	// 告诉 Ebiten 画布大小就是窗口大小
 	return g.MyPet.Width, g.MyPet.Height
+}
+
+// saveState 将当前状态写入 config.json
+func (g *Manager) saveState() {
+	cfg := &config.Config{
+		ImagePath:     g.currentImgPath, // 保存当前图片路径
+		ShowColor:     g.ShowColor,
+		ShowGlitch:    g.ShowGlitch,
+		ShowAnimation: g.ShowAnimation,
+		ShowMonitor:   g.ShowMonitor,
+	}
+
+	// 调用我们在上一步写好的 Save 函数
+	if err := config.Save(cfg, "config.json"); err != nil {
+		// 如果保存失败（比如没权限），打印日志但不崩溃
+		log.Println("保存配置失败:", err)
+	} else {
+		log.Println("配置已保存")
+	}
 }
