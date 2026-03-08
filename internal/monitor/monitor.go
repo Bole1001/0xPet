@@ -1,3 +1,4 @@
+// Package monitor provides functions and types for monitor
 package monitor
 
 import (
@@ -8,7 +9,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
-// 定义两个全局变量存数据 (为了简单，这里没用锁，对于显示挂件精度要求不高)
+// 定义两个全局变量存数据
 var (
 	currentCPU float64
 	currentMem float64
@@ -40,9 +41,6 @@ func updateStats() {
 	}
 
 	// 2. 获取 CPU
-	// Percent(0, false) 表示计算所有核的平均值，0 表示直接取当前瞬时(不等待采样)
-	// 但 gopsutil 推荐至少采样一段短时间，比如 500ms，否则可能拿到 0
-	// 这里我们为了不阻塞后台线程太久，用上次调用的间隔计算
 	c, err := cpu.Percent(0, false)
 	if err == nil && len(c) > 0 {
 		currentCPU = c[0]
