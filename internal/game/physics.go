@@ -22,10 +22,10 @@ func (g *Manager) updatePhysics() {
 	isHover := mx >= 0 && mx <= ww && my >= 0 && my <= wh
 
 	// 2. 动态调整 TPS (性能优化)
-	if isHover || isMoving || g.ShowAnimation {
-		ebiten.SetTPS(60) // 交互或动画中：丝滑模式
+	if isHover || isMoving || g.ShowAnimation || g.ShowGlitch {
+		ebiten.SetTPS(60) // 交互或动画、特效进行中：丝滑模式
 	} else {
-		ebiten.SetTPS(5) // 无人理睬且无动画：省电模式
+		ebiten.SetTPS(5) // 纯静止：省电模式
 	}
 
 	// 3. 拖拽与滑行状态机

@@ -81,15 +81,17 @@ func (g *Manager) Update() error {
 	// 3. 时间步进
 	g.tick++
 
-	// 4. 拦截器：如果菜单已完全打开，则挂起物理引擎与特效计算
+	// 先更新特效状态，确保即使在菜单打开时，背后的宠物依然有特效
+	g.updateEffects()
+
+	// 4. 拦截器：如果菜单已完全打开，则挂起物理引擎
 	if g.ShowMenu && g.menuAnim > 0.9 {
 		g.handleMenuClick()
 		return nil
 	}
 
-	// 5. 核心逻辑更新
-	g.updatePhysics() // 物理位置更新
-	g.updateEffects() // 故障特效与监控更新
+	// 5. 核心逻辑更新 (物理滑行被挂起，不影响静止时的特效)
+	g.updatePhysics()
 
 	return nil
 }

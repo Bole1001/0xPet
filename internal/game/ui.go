@@ -75,6 +75,34 @@ func (g *Manager) handleUIInput() {
 	if w != targetW || h != targetH {
 		ebiten.SetWindowSize(targetW, targetH)
 	}
+
+	// 必须在 SetWindowSize 之后立即执行，检测新的窗口体积是否溢出屏幕
+	if g.menuAnim > 0 {
+		wx, wy := ebiten.WindowPosition()
+		sw, sh := ebiten.ScreenSizeInFullscreen()
+		needsMove := false
+
+		// X轴：如果窗口右侧超出了屏幕右侧，将窗口向左推
+		if wx+targetW > sw {
+			wx = sw - targetW
+			needsMove = true
+		}
+
+		// Y轴：如果菜单撑高了窗口，且底部超出了屏幕任务栏，将窗口向上推
+		if wy+targetH > sh {
+			wy = sh - targetH
+			needsMove = true
+		}
+
+		if needsMove {
+			ebiten.SetWindowPosition(wx, wy)
+
+			// 【严密性修复】强制同步物理引擎的历史坐标
+			// 防止由于系统的强行位移，导致关闭菜单时物理引擎计算出巨大的幽灵惯性速度
+			g.lastWinX = wx
+			g.lastWinY = wy
+		}
+	}
 }
 
 // handleMenuClick 处理菜单界面的点击坐标命中检测 (Hit-Testing)

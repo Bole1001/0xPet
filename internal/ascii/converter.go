@@ -1,3 +1,4 @@
+// Package ascii provides functions and types for converting images to ASCII art
 package ascii
 
 import (
