@@ -11,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
+	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 )
 
@@ -53,19 +54,27 @@ func (g *Manager) drawPet(screen *ebiten.Image) {
 	isMoving := g.isDragging || math.Abs(g.velX) > 0.1 || math.Abs(g.velY) > 0.1
 	offsetY := 0.0
 
-	// 动画浮动计算
 	if g.ShowAnimation && !isMoving {
 		offsetY = math.Sin(g.tick*0.05) * 5
 	}
 
-	baseY := 30 + int(offsetY)
-	fontW, fontH := 7, 13
+	baseY := 30.0 + offsetY
 
-	// 渲染字符网格
+	// 【新增】根据模式选择正确的字库与间距
+	var currentFont font.Face
+	var fontW, fontH float64
+	if g.DisplayMode == 0 {
+		currentFont = g.FontNormal
+		fontW, fontH = 7.0, 13.0
+	} else {
+		currentFont = g.FontSmall
+		fontW, fontH = 3.5, 6.5
+	}
+
 	for r, row := range g.MyPet.Grid {
 		for c, charData := range row {
-			x := float64(c * fontW) // 【修正】绝对钉死，不再横向偏移
-			y := float64(r*fontH + baseY)
+			x := float64(c) * fontW
+			y := float64(r)*fontH + baseY
 
 			var drawColor color.Color
 			if g.MyPet.IsStressed {
@@ -76,14 +85,15 @@ func (g *Manager) drawPet(screen *ebiten.Image) {
 				drawColor = color.RGBA{0, 255, 0, 255}
 			}
 
-			text.Draw(screen, charData.Char, basicfont.Face7x13, int(x), int(y), drawColor)
+			// 【关键】废弃 basicfont，使用当前模式的高清矢量字库
+			text.Draw(screen, charData.Char, currentFont, int(x), int(y), drawColor)
 		}
 	}
 
-	// 渲染 HUD
 	if g.ShowMonitor && !isMoving {
 		msg := fmt.Sprintf("CPU: %.0f%% | MEM: %.0f%%", g.MyPet.CPUUsage, g.MyPet.MemUsage)
-		text.Draw(screen, msg, basicfont.Face7x13, 0, 10, color.RGBA{255, 255, 0, 255})
+		// HUD 永远使用正常大小的字体，保证可读性
+		text.Draw(screen, msg, g.FontNormal, 0, 15, color.RGBA{255, 255, 0, 255})
 	}
 }
 
@@ -158,6 +168,18 @@ func (g *Manager) drawMenu(screen *ebiten.Image) {
 		vector.DrawFilledRect(screen, baseBtnX, y4, 4, btnH, accentColor, false)
 	}
 	drawCenteredText(statusText, int(y4), statusCol)
+
+	// DISPLAY MODE
+	y5 := y4 + btnH + gap
+	vector.DrawFilledRect(screen, baseBtnX, y5, btnW, btnH, btnBg, false)
+	modeText := "MODE: NORMAL"
+	if g.DisplayMode == 1 {
+		modeText = "MODE: HI-RES"
+	} else if g.DisplayMode == 2 {
+		modeText = "MODE: MINI"
+	}
+	drawCenteredText(modeText, int(y5), accentColor)
+	vector.DrawFilledRect(screen, baseBtnX, y5, 4, btnH, accentColor, false)
 
 	// EXIT
 	yExit := float32(h) - 50

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"image"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -8,8 +9,8 @@ import (
 )
 
 const (
-	MenuWidth  = 200 // 抽屉菜单的固定物理宽度
-	MenuHeight = 250 // 抽屉菜单的最低高度 (确保能容纳 5 个按钮)
+	MenuWidth  = 200
+	MenuHeight = 300 // 撑高菜单以容纳新按钮
 )
 
 // handleUIInput 处理快捷键、右键状态以及菜单展开的动态窗口伸缩
@@ -136,6 +137,9 @@ func (g *Manager) handleMenuClick() {
 	btn4Top := btn3Bot + gap
 	btn4Bot := btn4Top + btnH
 
+	btn5Top := btn4Bot + gap
+	btn5Bot := btn5Top + btnH
+
 	_, h := ebiten.WindowSize()
 	btnExitTop := h - 50
 	btnExitBot := btnExitTop + btnH
@@ -159,6 +163,19 @@ func (g *Manager) handleMenuClick() {
 	if my >= btn4Top && my <= btn4Bot {
 		g.ShowMonitor = !g.ShowMonitor
 		g.saveState()
+		return
+	}
+	if my >= btn5Top && my <= btn5Bot {
+		g.DisplayMode = (g.DisplayMode + 1) % 3 // 在 0, 1, 2 之间循环
+
+		// 模式切换后，必须重新解析当前图片并调整窗口
+		file, err := os.Open(g.currentImgPath)
+		if err == nil {
+			defer file.Close()
+			if img, _, err := image.Decode(file); err == nil {
+				g.UpdatePetWithImage(img)
+			}
+		}
 		return
 	}
 	if my >= btnExitTop && my <= btnExitBot {

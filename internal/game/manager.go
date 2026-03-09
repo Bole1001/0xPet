@@ -9,9 +9,10 @@ import (
 	"0xPet/internal/entity"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 )
 
-// Manager 游戏全局状态管理器
 type Manager struct {
 	MyPet *entity.Pet
 	tick  float64
@@ -20,6 +21,13 @@ type Manager struct {
 	ShowGlitch    bool
 	ShowAnimation bool
 	ShowMonitor   bool
+
+	// 【新增】显示模式：0=正常, 1=高分辨率, 2=迷你模式
+	DisplayMode int
+
+	// 【新增】字体实例
+	FontNormal font.Face
+	FontSmall  font.Face
 
 	// 物理相关
 	isDragging bool
@@ -33,12 +41,10 @@ type Manager struct {
 	currentImgPath string
 
 	// 菜单相关
-	ShowMenu   bool
-	menuAnim   float64
-	menuHeight int
+	ShowMenu bool
+	menuAnim float64
 }
 
-// Init 初始化管理器
 func (g *Manager) Init() {
 	g.MyPet = &entity.Pet{}
 
@@ -52,6 +58,19 @@ func (g *Manager) Init() {
 	g.ShowAnimation = cfg.ShowAnimation
 	g.ShowMonitor = cfg.ShowMonitor
 
+	// 【新增】加载 TTF 字体并生成一大一小两个字库实例
+	fontBytes, err := os.ReadFile("assets/PixelOperatorMono.ttf")
+	if err != nil {
+		log.Fatal("无法加载字体文件:", err)
+	}
+	tt, err := opentype.Parse(fontBytes)
+	if err != nil {
+		log.Fatal("解析字体失败:", err)
+	}
+	// DPI 72 是一倍缩放标准。13 和 6.5 是绝对像素高度
+	g.FontNormal, _ = opentype.NewFace(tt, &opentype.FaceOptions{Size: 13, DPI: 72})
+	g.FontSmall, _ = opentype.NewFace(tt, &opentype.FaceOptions{Size: 6.5, DPI: 72})
+
 	imageToLoad := "assets/idle.png"
 	if cfg.ImagePath != "" {
 		if _, err := os.Stat(cfg.ImagePath); err == nil {
@@ -60,43 +79,29 @@ func (g *Manager) Init() {
 	}
 
 	g.LoadPetImage(imageToLoad)
-	g.menuHeight = 200 // 待重构移除
 }
 
-// Layout 定义逻辑屏幕尺寸
 func (g *Manager) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return outsideWidth, outsideHeight
 }
 
-// Update 游戏主循环 (逻辑层)
 func (g *Manager) Update() error {
-	// 1. 系统级输入 (ESC退出、文件拖拽)
 	if err := g.handleSystemInput(); err != nil {
 		return err
 	}
-
-	// 2. UI交互输入 (快捷键、右键菜单)
 	g.handleUIInput()
-
-	// 3. 时间步进
 	g.tick++
-
-	// 先更新特效状态，确保即使在菜单打开时，背后的宠物依然有特效
 	g.updateEffects()
 
-	// 4. 拦截器：如果菜单已完全打开，则挂起物理引擎
 	if g.ShowMenu && g.menuAnim > 0.9 {
 		g.handleMenuClick()
 		return nil
 	}
 
-	// 5. 核心逻辑更新 (物理滑行被挂起，不影响静止时的特效)
 	g.updatePhysics()
-
 	return nil
 }
 
-// Draw 游戏渲染循环 (表现层)
 func (g *Manager) Draw(screen *ebiten.Image) {
 	if g.menuAnim > 0 {
 		g.drawMenu(screen)

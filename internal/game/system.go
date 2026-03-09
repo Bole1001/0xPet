@@ -80,12 +80,24 @@ func (g *Manager) LoadPetImage(path string) {
 
 // UpdatePetWithImage 核心逻辑：图片对象转字符画，计算实体尺寸
 func (g *Manager) UpdatePetWithImage(img image.Image) {
-	// 注意：这里的 charWidthCount 暂时硬编码为 50。
-	// 后续实现“大精细/小粗糙”分辨率切换时，此处将改为读取 g.IsHighRes 状态。
-	charWidthCount := 50
+	var charWidthCount int
+	var fontW, fontH float64
+
+	// 【核心逻辑】根据当前模式设定渲染参数
+	switch g.DisplayMode {
+	case 0: // 正常模式 (50宽，大字)
+		charWidthCount = 50
+		fontW, fontH = 7.0, 13.0
+	case 1: // 高清模式 (100宽，小字，窗口大小不变)
+		charWidthCount = 100
+		fontW, fontH = 3.5, 6.5
+	case 2: // 迷你模式 (50宽，小字，窗口缩小一半)
+		charWidthCount = 50
+		fontW, fontH = 3.5, 6.5
+	}
+
 	asciiLines, grid := ascii.Convert(img, charWidthCount)
 
-	fontW, fontH := 7, 13
 	maxLineLen := 0
 	for _, line := range asciiLines {
 		if len(line) > maxLineLen {
@@ -93,9 +105,10 @@ func (g *Manager) UpdatePetWithImage(img image.Image) {
 		}
 	}
 
-	winWidth := maxLineLen * fontW
+	// 计算物理窗口大小
+	winWidth := int(float64(maxLineLen) * fontW)
 	paddingTop := 20
-	winHeight := len(asciiLines)*fontH + paddingTop
+	winHeight := int(float64(len(asciiLines))*fontH) + paddingTop
 
 	fullText := strings.Join(asciiLines, "\n")
 	g.MyPet.OriginalContent = fullText
