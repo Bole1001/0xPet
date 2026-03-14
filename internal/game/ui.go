@@ -1,21 +1,21 @@
 package game
 
 import (
-	"image"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+// 采用全局恒定的紧凑型菜单尺寸
 const (
-	MenuWidth  = 200
-	MenuHeight = 300 // 撑高菜单以容纳新按钮
+	MenuWidth = 160 // 宽度收紧，足够放下13px的纯文本
+	RowHeight = 25  // 每行的高度，无额外 Gap
+	StartY    = 20  // 顶部留白
+	MinMenuH  = 180 // 菜单的最小安全高度 (20 + 6*25 + 10底部留白)
 )
 
-// handleUIInput 处理快捷键、右键状态以及菜单展开的动态窗口伸缩
 func (g *Manager) handleUIInput() {
-	// 1. 快捷键监听
 	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
 		g.ShowColor = !g.ShowColor
 	}
@@ -29,19 +29,16 @@ func (g *Manager) handleUIInput() {
 		g.ShowMonitor = !g.ShowMonitor
 	}
 
-	// 2. 右键菜单开关
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		g.ShowMenu = !g.ShowMenu
-		g.velX, g.velY = 0, 0 // 打开/关闭菜单时强行消除物理惯性
+		g.velX, g.velY = 0, 0
 	}
 
-	// 3. 失去焦点自动收起
 	if g.ShowMenu && !ebiten.IsFocused() {
 		g.ShowMenu = false
 		g.velX, g.velY = 0, 0
 	}
 
-	// 4. 计算动画进度 (平滑插值)
 	speed := 0.1
 	if g.ShowMenu {
 		if g.menuAnim < 1.0 {
@@ -59,17 +56,15 @@ func (g *Manager) handleUIInput() {
 		g.menuAnim = 0.0
 	}
 
-	// 5. 动态调整窗口尺寸 (侧滑抽屉核心逻辑)
 	currentPetW := g.MyPet.Width
 	currentPetH := g.MyPet.Height
 
-	// 横向拉长：宠物宽度 + 菜单宽度*进度
 	targetW := currentPetW + int(float64(MenuWidth)*g.menuAnim)
 	targetH := currentPetH
 
-	// 纵向撑高：如果菜单处于展开状态，且宠物高度不足以放下菜单，则撑高窗口
-	if g.menuAnim > 0 && MenuHeight > currentPetH {
-		targetH = MenuHeight
+	// 纵向撑高：哪怕是 Mini 模式，也确保有 180px 高度容纳菜单
+	if g.menuAnim > 0 && MinMenuH > currentPetH {
+		targetH = MinMenuH
 	}
 
 	w, h := ebiten.WindowSize()
@@ -77,108 +72,66 @@ func (g *Manager) handleUIInput() {
 		ebiten.SetWindowSize(targetW, targetH)
 	}
 
-	// 必须在 SetWindowSize 之后立即执行，检测新的窗口体积是否溢出屏幕
 	if g.menuAnim > 0 {
 		wx, wy := ebiten.WindowPosition()
 		sw, sh := ebiten.ScreenSizeInFullscreen()
 		needsMove := false
 
-		// X轴：如果窗口右侧超出了屏幕右侧，将窗口向左推
 		if wx+targetW > sw {
 			wx = sw - targetW
 			needsMove = true
 		}
-
-		// Y轴：如果菜单撑高了窗口，且底部超出了屏幕任务栏，将窗口向上推
 		if wy+targetH > sh {
 			wy = sh - targetH
 			needsMove = true
 		}
-
 		if needsMove {
 			ebiten.SetWindowPosition(wx, wy)
-
-			// 【严密性修复】强制同步物理引擎的历史坐标
-			// 防止由于系统的强行位移，导致关闭菜单时物理引擎计算出巨大的幽灵惯性速度
 			g.lastWinX = wx
 			g.lastWinY = wy
 		}
 	}
 }
 
-// handleMenuClick 处理菜单界面的点击坐标命中检测 (Hit-Testing)
 func (g *Manager) handleMenuClick() {
 	if !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		return
 	}
 
 	mx, my := ebiten.CursorPosition()
-
-	// 【新增拦截】X轴阻断
-	// 因为菜单是从宠物右侧拉出来的，如果点击的 X 坐标小于宠物宽度，说明点在宠物身上，直接忽略
 	if mx < g.MyPet.Width {
 		return
 	}
 
-	// 定义布局参数 (必须与 Draw 层严格一致)
-	startBtnY := 50
-	btnH := 30
-	gap := 15
+	// 紧凑型碰撞检测
+	clickedIdx := -1
+	for i := 0; i < 6; i++ {
+		top := StartY + i*RowHeight
+		bot := top + RowHeight
+		if my >= top && my <= bot {
+			clickedIdx = i
+			break
+		}
+	}
 
-	btn1Top := startBtnY
-	btn1Bot := btn1Top + btnH
-
-	btn2Top := btn1Bot + gap
-	btn2Bot := btn2Top + btnH
-
-	btn3Top := btn2Bot + gap
-	btn3Bot := btn3Top + btnH
-
-	btn4Top := btn3Bot + gap
-	btn4Bot := btn4Top + btnH
-
-	btn5Top := btn4Bot + gap
-	btn5Bot := btn5Top + btnH
-
-	_, h := ebiten.WindowSize()
-	btnExitTop := h - 50
-	btnExitBot := btnExitTop + btnH
-
-	// 命中执行逻辑
-	if my >= btn1Top && my <= btn1Bot {
+	switch clickedIdx {
+	case 0:
 		g.ShowColor = !g.ShowColor
 		g.saveState()
-		return
-	}
-	if my >= btn2Top && my <= btn2Bot {
+	case 1:
 		g.ShowGlitch = !g.ShowGlitch
 		g.saveState()
-		return
-	}
-	if my >= btn3Top && my <= btn3Bot {
+	case 2:
 		g.ShowAnimation = !g.ShowAnimation
 		g.saveState()
-		return
-	}
-	if my >= btn4Top && my <= btn4Bot {
+	case 3:
 		g.ShowMonitor = !g.ShowMonitor
 		g.saveState()
-		return
-	}
-	if my >= btn5Top && my <= btn5Bot {
-		g.DisplayMode = (g.DisplayMode + 1) % 3 // 在 0, 1, 2 之间循环
-
-		// 模式切换后，必须重新解析当前图片并调整窗口
-		file, err := os.Open(g.currentImgPath)
-		if err == nil {
-			defer file.Close()
-			if img, _, err := image.Decode(file); err == nil {
-				g.UpdatePetWithImage(img)
-			}
-		}
-		return
-	}
-	if my >= btnExitTop && my <= btnExitBot {
+	case 4:
+		g.DisplayMode = (g.DisplayMode + 1) % 3
+		g.saveState()
+		g.LoadPetImage(g.currentImgPath)
+	case 5:
 		g.saveState()
 		os.Exit(0)
 	}

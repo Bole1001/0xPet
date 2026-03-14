@@ -12,7 +12,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
 )
 
 // updateEffects 处理每一帧的数据同步与故障特效计算
@@ -97,92 +96,68 @@ func (g *Manager) drawPet(screen *ebiten.Image) {
 	}
 }
 
-// drawMenu 渲染侧滑抽屉菜单
+// drawMenu 渲染复古控制台风格的紧凑型菜单
 func (g *Manager) drawMenu(screen *ebiten.Image) {
 	w, h := screen.Size()
+	menuX := float32(w - MenuWidth)
 
-	// 【核心逻辑】菜单始终吸附在当前窗口的最右侧边缘
-	// 因为 w 在 ui.go 中被动态拉宽，这会产生完美的抽出动画
-	menuX := float32(w) - MenuWidth
+	// 1. 绘制极简半透明背景
+	bgColor := color.RGBA{8, 8, 12, 230}
+	vector.DrawFilledRect(screen, menuX, 0, float32(MenuWidth), float32(h), bgColor, false)
 
-	// 1. 画抽屉背景面板
-	bgColor := color.RGBA{5, 5, 10, 245}
-	vector.DrawFilledRect(screen, menuX, 0, MenuWidth, float32(h), bgColor, false)
+	// 左侧高亮分割线
+	accentColor := color.RGBA{0, 255, 255, 255} // 青色
+	vector.DrawFilledRect(screen, menuX, 0, 2, float32(h), accentColor, false)
 
-	// 顶部能量条
-	accentColor := color.RGBA{0, 255, 255, 255}
-	vector.DrawFilledRect(screen, menuX, 0, MenuWidth, 4, accentColor, false)
-
-	// 2. 绘制按钮组 (严格映射 ui.go 中的物理碰撞坐标)
-	btnW := float32(MenuWidth - 40)
-	btnH := float32(30)
-	baseBtnX := menuX + 20
-	startBtnY := float32(50)
-	gap := float32(15)
-
-	textCol := color.RGBA{200, 200, 200, 255}
-	btnBg := color.RGBA{30, 30, 40, 255}
-	exitBg := color.RGBA{180, 40, 40, 255}
-
-	drawCenteredText := func(txt string, y int, col color.Color) {
-		textW := len(txt) * 7
-		textX := int(baseBtnX) + (int(btnW)-textW)/2
-		text.Draw(screen, txt, basicfont.Face7x13, textX, y+20, col)
+	// 2. 定义渲染结构
+	type menuItem struct {
+		label string
+		state bool
+		mType int // 0=普通开关, 1=模式切换, 2=退出
+	}
+	items := []menuItem{
+		{"COLOR", g.ShowColor, 0},
+		{"GLITCH", g.ShowGlitch, 0},
+		{"FLOAT", g.ShowAnimation, 0},
+		{"HUD", g.ShowMonitor, 0},
+		{"MODE", false, 1},
+		{"EXIT", false, 2},
 	}
 
-	// Color Mode
-	vector.DrawFilledRect(screen, baseBtnX, startBtnY, btnW, btnH, btnBg, false)
-	statusText, statusCol := "COLOR: OFF", textCol
-	if g.ShowColor {
-		statusText, statusCol = "COLOR: ON", accentColor
-		vector.DrawFilledRect(screen, baseBtnX, startBtnY, 4, btnH, accentColor, false)
-	}
-	drawCenteredText(statusText, int(startBtnY), statusCol)
+	baseTextX := int(menuX) + 15
+	// UI 永远使用大字号，确保可读性
+	menuFont := g.FontNormal
 
-	// Glitch Effect
-	y2 := startBtnY + btnH + gap
-	vector.DrawFilledRect(screen, baseBtnX, y2, btnW, btnH, btnBg, false)
-	statusText, statusCol = "GLITCH: OFF", textCol
-	if g.ShowGlitch {
-		statusText, statusCol = "GLITCH: ON", accentColor
-		vector.DrawFilledRect(screen, baseBtnX, y2, 4, btnH, accentColor, false)
-	}
-	drawCenteredText(statusText, int(y2), statusCol)
+	// 3. 逐行渲染
+	for i, item := range items {
+		// 行的垂直中心偏下对齐
+		textY := StartY + i*RowHeight + 18
 
-	// Float Animation
-	y3 := y2 + btnH + gap
-	vector.DrawFilledRect(screen, baseBtnX, y3, btnW, btnH, btnBg, false)
-	statusText, statusCol = "FLOAT: OFF", textCol
-	if g.ShowAnimation {
-		statusText, statusCol = "FLOAT: ON", accentColor
-		vector.DrawFilledRect(screen, baseBtnX, y3, 4, btnH, accentColor, false)
-	}
-	drawCenteredText(statusText, int(y3), statusCol)
+		var symbol string
+		var drawCol color.Color = color.RGBA{180, 180, 190, 255} // 默认暗白
 
-	// Monitor HUD
-	y4 := y3 + btnH + gap
-	vector.DrawFilledRect(screen, baseBtnX, y4, btnW, btnH, btnBg, false)
-	statusText, statusCol = "HUD: OFF", textCol
-	if g.ShowMonitor {
-		statusText, statusCol = "HUD: ON", accentColor
-		vector.DrawFilledRect(screen, baseBtnX, y4, 4, btnH, accentColor, false)
-	}
-	drawCenteredText(statusText, int(y4), statusCol)
+		if item.mType == 2 {
+			// 退出按钮
+			symbol = "[!]"
+			drawCol = color.RGBA{255, 100, 100, 255} // 红色
+		} else if item.mType == 1 {
+			// 模式切换按钮
+			modes := []string{"NORMAL", "HI-RES", "MINI"}
+			symbol = "[~]"
+			item.label = item.label + ": " + modes[g.DisplayMode]
+			drawCol = color.RGBA{220, 220, 80, 255} // 黄色
+		} else {
+			// 普通开关
+			if item.state {
+				symbol = "[*]"
+				drawCol = accentColor // 开启时高亮青色
+			} else {
+				symbol = "[ ]"
+			}
+		}
 
-	// DISPLAY MODE
-	y5 := y4 + btnH + gap
-	vector.DrawFilledRect(screen, baseBtnX, y5, btnW, btnH, btnBg, false)
-	modeText := "MODE: NORMAL"
-	if g.DisplayMode == 1 {
-		modeText = "MODE: HI-RES"
-	} else if g.DisplayMode == 2 {
-		modeText = "MODE: MINI"
+		// 格式化输出，例如：[*] COLOR   或   [~] MODE: MINI
+		fullText := fmt.Sprintf("%s %s", symbol, item.label)
+		text.Draw(screen, fullText, menuFont, baseTextX, textY, drawCol)
 	}
-	drawCenteredText(modeText, int(y5), accentColor)
-	vector.DrawFilledRect(screen, baseBtnX, y5, 4, btnH, accentColor, false)
-
-	// EXIT
-	yExit := float32(h) - 50
-	vector.DrawFilledRect(screen, baseBtnX, yExit, btnW, btnH, exitBg, false)
-	drawCenteredText(">> SYSTEM EXIT <<", int(yExit), color.White)
 }
