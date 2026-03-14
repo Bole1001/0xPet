@@ -8,14 +8,14 @@ import (
 	"strings"
 )
 
-// ASCII 字符集 (从黑到白，稍微调整了一下顺序以适应黑底或透明底)
-// 你可以根据喜好调整这个字符串
-const asciiChars = "@%#*+=-:. "
+// ASCII 字符集从密集到稀疏，越靠前的字符表示越暗的像素
+const asciiChars = "@W#80Oocv:,.. "
+
+//"@80QOo:,. "
 
 // Convert 将图片转换为 ASCII 字符串切片
 // img: 原始图片对象
 // targetWidth: 你希望生成的宠物宽度（字符数），比如 40 或 50
-// 【修改】返回值变了！现在返回 (字符串切片, 颜色网格)
 func Convert(img image.Image, targetWidth int) ([]string, [][]entity.CharData) {
 	bounds := img.Bounds()
 	width := bounds.Max.X

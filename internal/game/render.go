@@ -79,12 +79,36 @@ func (g *Manager) drawPet(screen *ebiten.Image) {
 			if g.MyPet.IsStressed {
 				drawColor = color.RGBA{255, 50, 50, 255}
 			} else if g.ShowColor {
-				drawColor = charData.Color
+				// 解析原图色彩，并强行提升 30% 的亮度，防止深色在透明背景下隐形
+				r, gg, b, a := charData.Color.RGBA()
+				boost := func(v uint32) uint8 {
+					val := float64(v>>8) * 1.3
+					if val > 255 {
+						return 255
+					}
+					return uint8(val)
+				}
+				drawColor = color.RGBA{boost(r), boost(gg), boost(b), uint8(a >> 8)}
 			} else {
-				drawColor = color.RGBA{0, 255, 0, 255}
+				drawColor = color.RGBA{0, 255, 0, 255} // 默认纯绿
 			}
 
-			// 【关键】废弃 basicfont，使用当前模式的高清矢量字库
+			// 1. 提取最终要绘制颜色的 8位 RGB 值
+			r32, g32, b32, _ := drawColor.RGBA()
+			r8, g8, b8 := r32>>8, g32>>8, b32>>8
+
+			// 2. 运用标准 sRGB 亮度公式计算人眼感知亮度 (范围: 0~255)
+			luminance := (r8*299 + g8*587 + b8*114) / 1000
+
+			// 3. 拦截过滤：
+			// 只有当字符亮度 > 70（不是深暗色），并且它不是一个不可见的空格时，才允许绘制保护性阴影
+			if luminance > 70 && charData.Char != " " {
+				// 将阴影的 Alpha 值稍微调柔和（180 -> 140），减少生硬的切割感
+				shadowColor := color.RGBA{0, 0, 0, 140}
+				text.Draw(screen, charData.Char, currentFont, int(x)+1, int(y)+1, shadowColor)
+			}
+
+			// 4. 无论如何，叠加绘制主体字符本身
 			text.Draw(screen, charData.Char, currentFont, int(x), int(y), drawColor)
 		}
 	}

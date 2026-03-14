@@ -85,15 +85,15 @@ func (g *Manager) UpdatePetWithImage(img image.Image) {
 
 	// 【核心逻辑】根据当前模式设定渲染参数
 	switch g.DisplayMode {
-	case 0: // 正常模式 (50宽，大字)
+	case 0: // 正常模式
 		charWidthCount = 50
-		fontW, fontH = 7.0, 13.0
-	case 1: // 高清模式 (100宽，小字，窗口大小不变)
+		fontW, fontH = 8.0, 16.0
+	case 1: // 高清模式
 		charWidthCount = 100
-		fontW, fontH = 3.5, 6.5
-	case 2: // 迷你模式 (50宽，小字，窗口缩小一半)
+		fontW, fontH = 4.0, 8.0
+	case 2: // 迷你模式
 		charWidthCount = 50
-		fontW, fontH = 3.5, 6.5
+		fontW, fontH = 4.0, 8.0
 	}
 
 	asciiLines, grid := ascii.Convert(img, charWidthCount)

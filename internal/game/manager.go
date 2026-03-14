@@ -67,9 +67,8 @@ func (g *Manager) Init() {
 	if err != nil {
 		log.Fatal("解析字体失败:", err)
 	}
-	// DPI 72 是一倍缩放标准。13 和 6.5 是绝对像素高度
-	g.FontNormal, _ = opentype.NewFace(tt, &opentype.FaceOptions{Size: 13, DPI: 72})
-	g.FontSmall, _ = opentype.NewFace(tt, &opentype.FaceOptions{Size: 6.5, DPI: 72})
+	g.FontNormal, _ = opentype.NewFace(tt, &opentype.FaceOptions{Size: 16, DPI: 72})
+	g.FontSmall, _ = opentype.NewFace(tt, &opentype.FaceOptions{Size: 8, DPI: 72})
 
 	imageToLoad := "assets/idle.png"
 	if cfg.ImagePath != "" {
