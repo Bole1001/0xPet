@@ -3,6 +3,7 @@ package game
 import (
 	"bytes"
 	"image"
+	"image/draw"
 	_ "image/png"
 	"io"
 	"io/fs"
@@ -80,6 +81,8 @@ func (g *Manager) LoadPetImage(path string) {
 
 // UpdatePetWithImage 核心逻辑：图片对象转字符画，计算实体尺寸
 func (g *Manager) UpdatePetWithImage(img image.Image) {
+	croppedImg := autoCropImage(img)
+
 	var charWidthCount int
 	var fontW, fontH float64
 
@@ -96,7 +99,7 @@ func (g *Manager) UpdatePetWithImage(img image.Image) {
 		fontW, fontH = 4.0, 8.0
 	}
 
-	asciiLines, grid := ascii.Convert(img, charWidthCount)
+	asciiLines, grid := ascii.Convert(croppedImg, charWidthCount)
 
 	maxLineLen := 0
 	for _, line := range asciiLines {
@@ -135,4 +138,67 @@ func (g *Manager) saveState() {
 	} else {
 		log.Println("配置已保存")
 	}
+}
+
+// autoCropImage 智能预处理：切除图片四周所有的透明像素，提取绝对主体的最小包围盒
+func autoCropImage(img image.Image) image.Image {
+	bounds := img.Bounds()
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X, bounds.Min.Y
+
+	// 1. 扫描寻找包含非透明像素的极值坐标
+	hasContent := false
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a > 0 { // 只要不是绝对透明
+				hasContent = true
+				if x < minX {
+					minX = x
+				}
+				if x > maxX {
+					maxX = x
+				}
+				if y < minY {
+					minY = y
+				}
+				if y > maxY {
+					maxY = y
+				}
+			}
+		}
+	}
+
+	// 如果全图都是透明的，或者计算出的包围盒无效，直接返回原图，防止崩溃
+	if !hasContent || minX > maxX || minY > maxY {
+		return img
+	}
+
+	// 2. 增加一点安全边距 (Padding)，防止边缘字符紧贴窗口被系统裁剪
+	padding := 2
+	minX -= padding
+	minY -= padding
+	maxX += padding
+	maxY += padding
+
+	// 确保不越界
+	if minX < bounds.Min.X {
+		minX = bounds.Min.X
+	}
+	if minY < bounds.Min.Y {
+		minY = bounds.Min.Y
+	}
+	if maxX > bounds.Max.X {
+		maxX = bounds.Max.X
+	}
+	if maxY > bounds.Max.Y {
+		maxY = bounds.Max.Y
+	}
+
+	// 3. 截取核心图像
+	cropRect := image.Rect(minX, minY, maxX, maxY)
+	croppedImg := image.NewRGBA(image.Rect(0, 0, cropRect.Dx(), cropRect.Dy()))
+	draw.Draw(croppedImg, croppedImg.Bounds(), img, cropRect.Min, draw.Src)
+
+	return croppedImg
 }

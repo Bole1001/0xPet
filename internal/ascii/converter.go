@@ -13,9 +13,7 @@ const asciiChars = "@W#80Oocv:,.. "
 
 //"@80QOo:,. "
 
-// Convert 将图片转换为 ASCII 字符串切片
-// img: 原始图片对象
-// targetWidth: 你希望生成的宠物宽度（字符数），比如 40 或 50
+// Convert 将图片转换为 ASCII 字符串切片 (高精度区块均值采样版)
 func Convert(img image.Image, targetWidth int) ([]string, [][]entity.CharData) {
 	bounds := img.Bounds()
 	width := bounds.Max.X
@@ -25,49 +23,88 @@ func Convert(img image.Image, targetWidth int) ([]string, [][]entity.CharData) {
 	if stepX < 1 {
 		stepX = 1
 	}
-	stepY := stepX * 2
+	stepY := stepX * 2 // 终端字符通常是 1:2 的长宽比
 
 	var strResult []string
-	// 【新增】初始化网格切片
 	var gridResult [][]entity.CharData
 
 	for y := 0; y < height; y += stepY {
 		var lineBuilder strings.Builder
-		// 【新增】这一行的字符数据切片
 		var lineGrid []entity.CharData
 
-		for x := 0; x < width; x += stepX {
-			pixel := img.At(x, y)       // 获取原始颜色
-			char := pixelToASCII(pixel) // 转成字符
+		// 计算当前区块的 Y 轴物理边界 (防止越界)
+		endY := y + stepY
+		if endY > height {
+			endY = height
+		}
 
-			// 1. 拼接到字符串 (旧逻辑)
+		for x := 0; x < width; x += stepX {
+			// 计算当前区块的 X 轴物理边界
+			endX := x + stepX
+			if endX > width {
+				endX = width
+			}
+
+			// 1. 初始化能量积分器
+			var rSum, gSum, bSum, aSum uint64
+			var count uint64
+
+			// 2. 遍历该物理区块内的所有真实像素
+			for by := y; by < endY; by++ {
+				for bx := x; bx < endX; bx++ {
+					r, g, b, a := img.At(bx, by).RGBA() // 提取 16-bit 原始颜色
+					rSum += uint64(r)
+					gSum += uint64(g)
+					bSum += uint64(b)
+					aSum += uint64(a)
+					count++
+				}
+			}
+
+			// 防御性除零保护
+			if count == 0 {
+				count = 1
+			}
+
+			// 3. 计算物理区块的绝对平均颜色 (降级回 16-bit 以适配 Go 的 Color 接口)
+			avgColor := color.RGBA64{
+				R: uint16(rSum / count),
+				G: uint16(gSum / count),
+				B: uint16(bSum / count),
+				A: uint16(aSum / count),
+			}
+
+			// 4. 使用平均颜色进行字符映射
+			char := pixelToASCII(avgColor)
+
 			lineBuilder.WriteString(char)
 
-			// 2. 【新增】存入 Grid (新逻辑)
 			lineGrid = append(lineGrid, entity.CharData{
-				OriginalChar: char,  // 记下原本的
-				Char:         char,  // 默认显示原本的
-				Color:        pixel, // 记下原始颜色！
+				OriginalChar: char,
+				Char:         char,
+				Color:        avgColor, // 【关键】将计算出的平均色彩存入数据层，供后续渲染
 			})
 		}
 		strResult = append(strResult, lineBuilder.String())
-		// 【新增】将这一行存入网格
 		gridResult = append(gridResult, lineGrid)
 	}
 
 	return strResult, gridResult
 }
 
-// 你的原始转换逻辑，完全保留
+// pixelToASCII 将单个像素颜色转换为 ASCII 字符
 func pixelToASCII(c color.Color) string {
-	r, g, b, _ := c.RGBA()
-	// Go 的 RGBA 返回 16bit (0-65535)，右移 8 位变成 0-255
+	r, g, b, a := c.RGBA() // 提取全部 4 个通道
+
+	if a < 6553 {
+		return " "
+	}
+
+	// 计算有效像素的灰度值
 	gray := 0.299*float64(r>>8) + 0.587*float64(g>>8) + 0.114*float64(b>>8)
 
-	// 映射到字符集索引
 	idx := int(gray / 255 * float64(len(asciiChars)-1))
 
-	// 防御性编程：防止浮点数精度问题导致 idx 越界
 	if idx >= len(asciiChars) {
 		idx = len(asciiChars) - 1
 	}
