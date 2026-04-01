@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 
@@ -97,13 +98,19 @@ func (g *Manager) drawPet(screen *ebiten.Image) {
 	}
 }
 
-func (g *Manager) drawMenu(screen *ebiten.Image) {
-	w, h := screen.Size()
-	menuX := float32(w - MenuWidth)
+func (g *Manager) buildMenuCanvas(height int) {
+	if height <= 0 {
+		return
+	}
+
+	if g.menuCanvas == nil || g.menuCanvas.Bounds().Dy() != height {
+		g.menuCanvas = ebiten.NewImage(MenuWidth, height)
+	}
+	g.menuCanvas.Clear()
 
 	bgColor := color.RGBA{8, 8, 12, 230}
-	vector.DrawFilledRect(screen, menuX, 0, float32(MenuWidth), float32(h), bgColor, false)
-	vector.DrawFilledRect(screen, menuX, 0, 2, float32(h), color.RGBA{0, 255, 255, 255}, false)
+	vector.DrawFilledRect(g.menuCanvas, 0, 0, float32(MenuWidth), float32(height), bgColor, false)
+	vector.DrawFilledRect(g.menuCanvas, 0, 0, 2, float32(height), color.RGBA{0, 255, 255, 255}, false)
 
 	type menuItem struct {
 		label string
@@ -116,7 +123,7 @@ func (g *Manager) drawMenu(screen *ebiten.Image) {
 		{"EXIT", false},
 	}
 
-	baseTextX := int(menuX) + 15
+	baseTextX := 15
 	menuFont := g.FontNormal
 
 	for i, item := range items {
@@ -134,11 +141,47 @@ func (g *Manager) drawMenu(screen *ebiten.Image) {
 		if item.label == "MODE" {
 			modes := []string{"NORMAL", "HI-RES", "MINI"}
 			item.label = item.label + ": " + modes[g.DisplayMode]
+			symbol = "[~]"
 			drawCol = color.RGBA{220, 220, 80, 255}
+		} else if item.label == "EXIT" {
+			symbol = "[!]"
+			drawCol = color.RGBA{255, 100, 100, 255} // 警示红
+		} else {
+			if item.state {
+				symbol = "[*]"
+				drawCol = color.RGBA{0, 255, 255, 255} // 高亮青
+			} else {
+				symbol = "[ ]"
+			}
 		}
 
 		fullText := fmt.Sprintf("%s %s", symbol, item.label)
-		text.Draw(screen, fullText, menuFont, baseTextX, textY, drawCol)
+		text.Draw(g.menuCanvas, fullText, menuFont, baseTextX, textY, drawCol)
 	}
+
+	g.menuDirty = false
 }
 
+func (g *Manager) drawMenu(screen *ebiten.Image) {
+	w, h := screen.Size()
+	menuW := int(float64(MenuWidth) * g.menuAnim)
+	if menuW <= 0 {
+		return
+	}
+
+	if g.menuCanvas == nil || g.menuCanvas.Bounds().Dy() != h || g.menuDirty {
+		g.buildMenuCanvas(h)
+	}
+	if g.menuCanvas == nil {
+		return
+	}
+
+	subMenu, ok := g.menuCanvas.SubImage(image.Rect(0, 0, menuW, h)).(*ebiten.Image)
+	if !ok {
+		return
+	}
+
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(w-menuW), 0)
+	screen.DrawImage(subMenu, op)
+}

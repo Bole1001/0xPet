@@ -120,7 +120,11 @@ func (g *Manager) UpdatePetWithImage(img image.Image) {
 	g.MyPet.Width = winWidth
 	g.MyPet.Height = winHeight
 
-	ebiten.SetWindowSize(winWidth, winHeight)
+	windowWidth := winWidth + MenuWidth
+	if winHeight < MinMenuH {
+		winHeight = MinMenuH
+	}
+	ebiten.SetWindowSize(windowWidth, winHeight)
 
 	g.isDirty = true
 }

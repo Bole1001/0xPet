@@ -15,70 +15,10 @@ const (
 )
 
 func (g *Manager) handleUIInput() {
-	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
-		g.ShowColor = !g.ShowColor
-		g.isDirty = true
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
-		g.ShowMonitor = !g.ShowMonitor
-	}
-
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		g.ShowMenu = !g.ShowMenu
 		g.velX, g.velY = 0, 0
-	}
-
-	speed := 0.1
-	if g.ShowMenu {
-		if g.menuAnim < 1.0 {
-			g.menuAnim += speed
-		}
-	} else {
-		if g.menuAnim > 0.0 {
-			g.menuAnim -= speed
-		}
-	}
-	if g.menuAnim > 1.0 {
-		g.menuAnim = 1.0
-	}
-	if g.menuAnim < 0.0 {
-		g.menuAnim = 0.0
-	}
-
-	currentPetW := g.MyPet.Width
-	currentPetH := g.MyPet.Height
-
-	targetW := currentPetW + int(float64(MenuWidth)*g.menuAnim)
-	targetH := currentPetH
-
-	// 纵向撑高：哪怕是 Mini 模式，也确保有 180px 高度容纳菜单
-	if g.menuAnim > 0 && MinMenuH > currentPetH {
-		targetH = MinMenuH
-	}
-
-	w, h := ebiten.WindowSize()
-	if w != targetW || h != targetH {
-		ebiten.SetWindowSize(targetW, targetH)
-	}
-
-	if g.menuAnim > 0 {
-		wx, wy := ebiten.WindowPosition()
-		sw, sh := ebiten.ScreenSizeInFullscreen()
-		needsMove := false
-
-		if wx+targetW > sw {
-			wx = sw - targetW
-			needsMove = true
-		}
-		if wy+targetH > sh {
-			wy = sh - targetH
-			needsMove = true
-		}
-		if needsMove {
-			ebiten.SetWindowPosition(wx, wy)
-			g.lastWinX = wx
-			g.lastWinY = wy
-		}
+		g.menuDirty = true
 	}
 }
 
@@ -88,7 +28,10 @@ func (g *Manager) handleMenuClick() {
 	}
 
 	mx, my := ebiten.CursorPosition()
-	if mx < g.MyPet.Width {
+	menuW := float64(MenuWidth) * g.menuAnim
+	sw, _ := ebiten.WindowSize()
+	menuX := float64(sw) - menuW
+	if float64(mx) < menuX {
 		return
 	}
 
@@ -106,12 +49,15 @@ func (g *Manager) handleMenuClick() {
 	case 0:
 		g.ShowColor = !g.ShowColor
 		g.isDirty = true
+		g.menuDirty = true
 		g.saveState()
 	case 1:
 		g.ShowMonitor = !g.ShowMonitor
+		g.menuDirty = true
 		g.saveState()
 	case 2:
 		g.DisplayMode = (g.DisplayMode + 1) % 3
+		g.menuDirty = true
 		g.saveState()
 		g.LoadPetImage(g.currentImgPath)
 	case 3:

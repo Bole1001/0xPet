@@ -21,11 +21,18 @@ func (g *Manager) updatePhysics() {
 	// 【关键修正】悬停判定使用实时窗口尺寸 ww, wh
 	isHover := mx >= 0 && mx <= ww && my >= 0 && my <= wh
 
-	// 2. 动态调整 TPS (性能优化)
-	if isHover || isMoving {
-		ebiten.SetTPS(60) // 交互中：丝滑模式
-	} else {
-		ebiten.SetTPS(5) // 纯静止：省电模式
+	// 2. 动态调整 TPS：空闲时最低，鼠标悬停时提升，菜单或滑动时保持流畅
+	targetTPS := 8
+	if g.ShowMenu {
+		targetTPS = 30 // 菜单时需要更流畅的响应
+	} else if isMoving {
+		targetTPS = 60 // 拖拽或惯性状态时保持流畅
+	} else if isHover {
+		targetTPS = 20 // 鼠标悬停时保持适度响应
+	}
+	if targetTPS != g.lastTPS {
+		ebiten.SetTPS(targetTPS)
+		g.lastTPS = targetTPS
 	}
 
 	// 3. 拖拽与滑行状态机

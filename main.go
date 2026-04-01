@@ -1,31 +1,29 @@
 package main
 
 import (
-	"0xPet/internal/game"
-	"0xPet/internal/monitor"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+// 空白挂件，不执行任何逻辑，不绘制任何像素
+type BlankGame struct{}
+
+func (g *BlankGame) Update() error             { return nil }
+func (g *BlankGame) Draw(screen *ebiten.Image) {}
+func (g *BlankGame) Layout(outsideWidth, outsideHeight int) (int, int) {
+	return 200, 200
+}
+
 func main() {
-	// 1. 基础窗口设置
-	ebiten.SetWindowDecorated(false)  // 无边框
-	ebiten.SetScreenTransparent(true) // 透明背景
-	ebiten.SetWindowFloating(true)    // 始终置顶
-	ebiten.SetWindowTitle("0xPet")
+	ebiten.SetWindowDecorated(false)
+	ebiten.SetScreenTransparent(true)
+	ebiten.SetWindowFloating(true)
 
-	ebiten.SetWindowSize(100, 100)
+	// 强制降频，切断所有渲染和逻辑更新压力
+	ebiten.SetTPS(5)
 
-	// 【新增】启动系统监控 (后台线程开始每秒采集数据)
-	monitor.Start()
-
-	// 2. 初始化逻辑
-	mgr := &game.Manager{}
-	mgr.Init() // 这里面会计算并重新 SetWindowSize
-
-	// 3. 启动
-	if err := ebiten.RunGame(mgr); err != nil {
+	if err := ebiten.RunGame(&BlankGame{}); err != nil {
 		log.Fatal(err)
 	}
 }

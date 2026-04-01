@@ -39,7 +39,11 @@ type Manager struct {
 	lastWinX   int
 	lastWinY   int
 
+	lastTPS        int
 	currentImgPath string
+
+	menuCanvas *ebiten.Image
+	menuDirty  bool
 
 	petCanvas *ebiten.Image
 	isDirty   bool
@@ -110,12 +114,32 @@ func (g *Manager) Update() error {
 		return err
 	}
 	g.handleUIInput()
+	g.updateMenuAnim()
 	if g.ShowMenu && g.menuAnim > 0.9 {
 		g.handleMenuClick()
 		return nil
 	}
 	g.updatePhysics()
 	return nil
+}
+
+func (g *Manager) updateMenuAnim() {
+	speed := 0.12
+	if g.ShowMenu {
+		if g.menuAnim < 1.0 {
+			g.menuAnim += speed
+			if g.menuAnim > 1.0 {
+				g.menuAnim = 1.0
+			}
+		}
+	} else {
+		if g.menuAnim > 0.0 {
+			g.menuAnim -= speed
+			if g.menuAnim < 0.0 {
+				g.menuAnim = 0.0
+			}
+		}
+	}
 }
 
 func (g *Manager) Draw(screen *ebiten.Image) {
