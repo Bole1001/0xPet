@@ -7,7 +7,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-// 采用全局恒定的紧凑型菜单尺寸
 const (
 	MenuWidth = 160 // 宽度收紧，足够放下13px的纯文本
 	RowHeight = 25  // 每行的高度，无额外 Gap
@@ -18,12 +17,7 @@ const (
 func (g *Manager) handleUIInput() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyC) {
 		g.ShowColor = !g.ShowColor
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyG) {
-		g.ShowGlitch = !g.ShowGlitch
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
-		g.ShowAnimation = !g.ShowAnimation
+		g.isDirty = true
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
 		g.ShowMonitor = !g.ShowMonitor
@@ -31,11 +25,6 @@ func (g *Manager) handleUIInput() {
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonRight) {
 		g.ShowMenu = !g.ShowMenu
-		g.velX, g.velY = 0, 0
-	}
-
-	if g.ShowMenu && !ebiten.IsFocused() {
-		g.ShowMenu = false
 		g.velX, g.velY = 0, 0
 	}
 
@@ -103,9 +92,8 @@ func (g *Manager) handleMenuClick() {
 		return
 	}
 
-	// 紧凑型碰撞检测
 	clickedIdx := -1
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 4; i++ {
 		top := StartY + i*RowHeight
 		bot := top + RowHeight
 		if my >= top && my <= bot {
@@ -117,21 +105,16 @@ func (g *Manager) handleMenuClick() {
 	switch clickedIdx {
 	case 0:
 		g.ShowColor = !g.ShowColor
+		g.isDirty = true
 		g.saveState()
 	case 1:
-		g.ShowGlitch = !g.ShowGlitch
-		g.saveState()
-	case 2:
-		g.ShowAnimation = !g.ShowAnimation
-		g.saveState()
-	case 3:
 		g.ShowMonitor = !g.ShowMonitor
 		g.saveState()
-	case 4:
+	case 2:
 		g.DisplayMode = (g.DisplayMode + 1) % 3
 		g.saveState()
 		g.LoadPetImage(g.currentImgPath)
-	case 5:
+	case 3:
 		g.saveState()
 		os.Exit(0)
 	}

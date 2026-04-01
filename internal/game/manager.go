@@ -4,9 +4,11 @@ package game
 import (
 	"log"
 	"os"
+	"time"
 
 	"0xPet/config"
 	"0xPet/internal/entity"
+	"0xPet/internal/monitor"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/image/font"
@@ -15,12 +17,11 @@ import (
 
 type Manager struct {
 	MyPet *entity.Pet
-	tick  float64
 
-	ShowColor     bool
-	ShowGlitch    bool
-	ShowAnimation bool
-	ShowMonitor   bool
+	ShowColor   bool
+	ShowMonitor bool
+	ShowMenu    bool
+	menuAnim    float64
 
 	// 【新增】显示模式：0=正常, 1=高分辨率, 2=迷你模式
 	DisplayMode int
@@ -40,9 +41,8 @@ type Manager struct {
 
 	currentImgPath string
 
-	// 菜单相关
-	ShowMenu bool
-	menuAnim float64
+	petCanvas *ebiten.Image
+	isDirty   bool
 }
 
 func (g *Manager) Init() {
@@ -54,8 +54,6 @@ func (g *Manager) Init() {
 	}
 
 	g.ShowColor = cfg.ShowColor
-	g.ShowGlitch = cfg.ShowGlitch
-	g.ShowAnimation = cfg.ShowAnimation
 	g.ShowMonitor = cfg.ShowMonitor
 
 	// 【新增】加载 TTF 字体并生成一大一小两个字库实例
@@ -78,6 +76,29 @@ func (g *Manager) Init() {
 	}
 
 	g.LoadPetImage(imageToLoad)
+
+	// 【新增：异步硬件监控协程】
+	// 与主渲染线程完全物理隔离，每 2 秒更新一次数据即可，彻底释放系统 CPU
+	go func() {
+		for {
+			// 如果由于某种原因 MyPet 未初始化，进行防御性挂起
+			if g.MyPet == nil {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// 低频调用系统 API
+			cpu, mem := monitor.GetStats()
+
+			// 写入内存，供渲染层 (drawPet) 直接以 O(1) 复杂度读取
+			g.MyPet.CPUUsage = cpu
+			g.MyPet.MemUsage = mem
+			g.MyPet.IsStressed = cpu > 80.0
+
+			// 强制休眠 2 秒 (人类查看 HUD 数据的合理刷新率)
+			time.Sleep(2 * time.Second)
+		}
+	}()
 }
 
 func (g *Manager) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -89,14 +110,10 @@ func (g *Manager) Update() error {
 		return err
 	}
 	g.handleUIInput()
-	g.tick++
-	g.updateEffects()
-
 	if g.ShowMenu && g.menuAnim > 0.9 {
 		g.handleMenuClick()
 		return nil
 	}
-
 	g.updatePhysics()
 	return nil
 }

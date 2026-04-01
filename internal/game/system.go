@@ -121,16 +121,16 @@ func (g *Manager) UpdatePetWithImage(img image.Image) {
 	g.MyPet.Height = winHeight
 
 	ebiten.SetWindowSize(winWidth, winHeight)
+
+	g.isDirty = true
 }
 
 // saveState 将当前状态写入 config.json
 func (g *Manager) saveState() {
 	cfg := &config.Config{
-		ImagePath:     g.currentImgPath,
-		ShowColor:     g.ShowColor,
-		ShowGlitch:    g.ShowGlitch,
-		ShowAnimation: g.ShowAnimation,
-		ShowMonitor:   g.ShowMonitor,
+		ImagePath:   g.currentImgPath,
+		ShowColor:   g.ShowColor,
+		ShowMonitor: g.ShowMonitor,
 	}
 
 	if err := config.Save(cfg, "config.json"); err != nil {
